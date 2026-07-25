@@ -29,15 +29,16 @@ const indices = [
   { key: "dow", label: "다우존스", base: 43120.9, vol: 90, chg: "-0.18%", up: false, seed: 5 },
 ];
 
-const macro = [
-  { key: "usdkrw", label: "USD/KRW", base: 1392.3, vol: 6, chg: "+0.21%", up: true, seed: 6 },
-  { key: "jpykrw", label: "JPY/KRW(100)", base: 902.15, vol: 3, chg: "-0.09%", up: false, seed: 7 },
+const commodities = [
   { key: "wti", label: "WTI 유가", base: 68.42, vol: 1.2, chg: "+1.12%", up: true, seed: 8, prefix: "$" },
   { key: "gold", label: "금 (온스)", base: 2614.8, vol: 15, chg: "+0.35%", up: true, seed: 9, prefix: "$" },
+  { key: "btc", label: "비트코인", base: 96420, vol: 1800, chg: "+2.14%", up: true, seed: 13, prefix: "$" },
+];
+
+const rates = [
   { key: "us10y", label: "美 10Y 금리", base: 4.28, vol: 0.08, chg: "-0.03%p", up: false, seed: 10, suffix: "%" },
   { key: "usbase", label: "美 기준금리", base: 4.5, vol: 0.02, chg: "0.00%p", up: true, seed: 11, suffix: "%" },
   { key: "krbase", label: "韓 기준금리", base: 2.75, vol: 0.02, chg: "0.00%p", up: true, seed: 12, suffix: "%" },
-  { key: "btc", label: "비트코인", base: 96420, vol: 1800, chg: "+2.14%", up: true, seed: 13, prefix: "$" },
 ];
 
 const newsDigest = [
@@ -436,6 +437,78 @@ const researchReports = [
   { firm: "미래에셋증권", title: "코스피 3분기 밸류에이션 점검", date: "26.06.29", url: "https://consensus.hankyung.com" },
 ];
 
+function YieldCurveChart({ data }: { data: any[] }) {
+  const chartData = data.map((d: any) => ({
+    name: d.sfln_intrc_nm.replace("수은채 유통수익률 ", ""),
+    rate: parseFloat(d.int_r),
+  }));
+  return (
+    <div>
+      <div style={{ height: 180 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData}>
+            <defs>
+              <linearGradient id="yieldFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={COL.accent} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={COL.accent} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="name" tick={{ fontSize: 9, fill: COL.muted }} interval={4} />
+            <YAxis hide domain={["auto", "auto"]} />
+            <Tooltip
+              contentStyle={{ background: COL.surface2, border: `1px solid ${COL.border}`, borderRadius: 8, fontSize: 12 }}
+            />
+            <Area type="monotone" dataKey="rate" stroke={COL.accent} strokeWidth={2} fill="url(#yieldFill)" dot={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="text-[11px] mt-1" style={{ color: COL.muted }}>
+        수출입은행이 발행한 채권(수은채)의 만기별 시장 유통수익률. 만기가 길수록 금리가 높은 우상향 곡선이 정상 상태.
+      </div>
+    </div>
+  );
+}
+
+function IntlRateSection({ data }: { data: any[] }) {
+  const currencies = Array.from(new Set(data.map((d: any) => d.cur_fund))) as string[];
+  const [tab, setTab] = useState(currencies[0] || "USD");
+  const filtered = data.filter((d: any) => d.cur_fund === tab);
+
+  return (
+    <div>
+      <div className="flex gap-1 mb-2">
+        {currencies.map((c) => (
+          <button
+            key={c}
+            onClick={() => setTab(c)}
+            className="text-xs px-2.5 py-1 rounded-md"
+            style={{
+              background: tab === c ? COL.accent : COL.surface,
+              color: tab === c ? "#0A0E14" : COL.muted,
+              border: `1px solid ${tab === c ? COL.accent : COL.border}`,
+              fontWeight: tab === c ? 700 : 500,
+            }}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {filtered.map((n: any, i: number) => (
+          <div
+            key={i}
+            className="flex justify-between text-sm rounded-lg px-3 py-2"
+            style={{ background: COL.surface, border: `1px solid ${COL.border}` }}
+          >
+            <span style={{ color: COL.muted }}>{n.sfln_intrc_nm}</span>
+            <span className="font-mono">{n.int_r}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ResearchSection() {
   return (
     <div className="mb-6">
@@ -479,6 +552,22 @@ export default function Dashboard() {
   const [newsTab, setNewsTab] = useState("전체");
   const filteredNews = newsDigest.filter((n) => newsTab === "전체" || n.market === newsTab);
 
+  const [exchangeData, setExchangeData] = useState<any[]>([]);
+  const [loanData, setLoanData] = useState<any[]>([]);
+  const [intlData, setIntlData] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/exim?type=exchange")
+      .then((r) => r.json())
+      .then((d) => setExchangeData(Array.isArray(d) ? d : []));
+    fetch("/api/exim?type=loan")
+      .then((r) => r.json())
+      .then((d) => setLoanData(Array.isArray(d) ? d : []));
+    fetch("/api/exim?type=international")
+      .then((r) => r.json())
+      .then((d) => setIntlData(Array.isArray(d) ? d : []));
+  }, []);
+
   return (
     <div className="min-h-screen w-full" style={{ background: COL.bg, color: COL.text }}>
       <div className="max-w-2xl mx-auto px-4 py-6">
@@ -508,16 +597,68 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* 환율/원자재/금리 */}
+		{/* 원자재 */}
         <div className="mb-2 text-sm font-medium" style={{ color: COL.muted }}>
-          환율·원자재·금리
+          원자재
         </div>
         <div className="flex gap-2.5 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
-          {macro.map((it) => (
+          {commodities.map((it) => (
             <MiniCard key={it.key} item={it} onClick={() => setSelected(it)} />
           ))}
         </div>
 
+		{/* 금리 */}
+        <div className="mb-2 text-sm font-medium" style={{ color: COL.muted }}>
+          금리
+        </div>
+        <div className="flex gap-2.5 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
+          {rates.map((it) => (
+            <MiniCard key={it.key} item={it} onClick={() => setSelected(it)} />
+          ))}
+        </div>
+
+		{/* 수출입은행 환율/금리 실데이터 */}
+        <div className="mb-6">
+          <div className="mb-2 text-sm font-medium" style={{ color: COL.muted }}>
+            환율 (수출입은행)
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {[...exchangeData]
+              .filter((c: any) => c.cur_unit !== "KRW")
+              .sort((a: any, b: any) => {
+                const order = ["USD", "JPY(100)", "CNH"];
+                const ai = order.indexOf(a.cur_unit);
+                const bi = order.indexOf(b.cur_unit);
+                if (ai === -1 && bi === -1) return 0;
+                if (ai === -1) return 1;
+                if (bi === -1) return -1;
+                return ai - bi;
+              })
+              .map((c: any) => (
+                <div
+                  key={c.cur_unit}
+                  className="min-w-[110px] rounded-xl px-3 py-2 shrink-0"
+                  style={{ background: COL.surface, border: `1px solid ${COL.border}` }}
+                >
+                  <div className="text-xs" style={{ color: COL.muted }}>
+                    {c.cur_nm} ({c.cur_unit})
+                  </div>
+                  <div className="font-mono text-sm font-semibold">{c.deal_bas_r}</div>
+                </div>
+              ))}
+          </div>
+
+          <div className="mb-2 mt-4 text-sm font-medium" style={{ color: COL.muted }}>
+            대출금리 (수은채 유통수익률 곡선)
+          </div>
+          {loanData.length > 0 && <YieldCurveChart data={loanData} />}
+
+          <div className="mb-2 mt-4 text-sm font-medium" style={{ color: COL.muted }}>
+            국제금리
+          </div>
+          <IntlRateSection data={intlData} />
+        </div>
+	
         {/* 히트맵 */}
         <HeatmapSection />
 
