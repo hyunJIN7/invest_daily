@@ -41,6 +41,11 @@ const rates = [
   { key: "krbase", label: "韓 기준금리", base: 2.75, vol: 0.02, chg: "0.00%p", up: true, seed: 12, suffix: "%" },
 ];
 
+function formatBasDt(basDt) {
+  if (!basDt || basDt.length !== 8) return "";
+  return `${basDt.slice(2, 4)}.${basDt.slice(4, 6)}.${basDt.slice(6, 8)}`;
+}
+
 const newsDigest = [
   {
     tag: "AI/테크",
@@ -556,6 +561,8 @@ const [exchangeData, setExchangeData] = useState<any[]>([]);
 const [loanData, setLoanData] = useState<any[]>([]);
 const [intlData, setIntlData] = useState<any[]>([]);
 const [twelveData, setTwelveData] = useState<Record<string, any>>({});
+const [krxData, setKrxData] = useState<Record<string, any>>({});
+const [btcData, setBtcData] = useState<any>(null);
 
 useEffect(() => {
   fetch("/api/exim?type=exchange")
@@ -570,16 +577,49 @@ useEffect(() => {
   fetch("/api/twelvedata")
     .then((r) => r.json())
     .then((d) => setTwelveData(d || {}));
+  fetch("/api/krx")
+    .then((r) => r.json())
+    .then((d) => setKrxData(d || {}));
+  fetch("/api/coingecko")
+    .then((r) => r.json())
+    .then((d) => setBtcData(d?.bitcoin || null));
 }, []);
 
-// 더미 indices 배열에 twelveData(실데이터)가 있으면 그걸로 덮어씌운 새 배열을 만듦
 const liveIndices = indices.map((it) => {
-  const live = twelveData[it.key]; // sp500, nasdaq, dow 일 때만 값이 있음
-  if (!live) return it; // 아직 못 받아왔거나 kospi/kosdaq이면 더미 그대로
+  // 해외 지수 (Twelve Data, ETF 프록시)
+  const tw = twelveData[it.key];
+  if (tw) {
+    const price = parseFloat(tw.close);
+    const changePct = parseFloat(tw.percent_change);
+    return {
+      ...it,
+      base: price,
+      chg: (changePct >= 0 ? "+" : "") + changePct.toFixed(2) + "%",
+      up: changePct >= 0,
+    };
+  }
 
-  const price = parseFloat(live.close);
-  const changePct = parseFloat(live.percent_change);
+  // 국내 지수 (KRX, 공공데이터포털) — 필드명이 clpr(종가)/fltRt(등락률)로 다름
+  const kr = krxData[it.key];
+  if (kr) {
+    const price = parseFloat(kr.clpr);
+    const changePct = parseFloat(kr.fltRt);
+    return {
+      ...it,
+      base: price,
+      chg: (changePct >= 0 ? "+" : "") + changePct.toFixed(2) + "%",
+      up: changePct >= 0,
+    };
+  }
 
+  return it; // 둘 다 없으면 더미 그대로
+});
+
+const liveCommodities = commodities.map((it) => {
+  if (it.key !== "btc" || !btcData) return it; // wti, gold는 아직 더미 유지
+
+  const price = btcData.usd;
+  const changePct = btcData.usd_24h_change;
   return {
     ...it,
     base: price,
@@ -608,9 +648,14 @@ const liveIndices = indices.map((it) => {
         </div>
 
         {/* 지수 */}
-        <div className="mb-2 text-sm font-medium" style={{ color: COL.muted }}>
+        <div className="mb-1 text-sm font-medium" style={{ color: COL.muted }}>
           국내·미국 지수 <span style={{ color: COL.accent }}>· 탭하면 상세 차트</span>
         </div>
+        {krxData.kospi && (
+          <div className="text-[11px] mb-2" style={{ color: COL.muted }}>
+            코스피·코스닥은 {formatBasDt(krxData.kospi.basDt)} 종가 기준 (전일 데이터)
+          </div>
+        )}
         <div className="flex gap-2.5 overflow-x-auto pb-2 mb-5 -mx-1 px-1">
           {liveIndices.map((it) => (
             <MiniCard key={it.key} item={it} onClick={() => setSelected(it)} />
@@ -622,7 +667,7 @@ const liveIndices = indices.map((it) => {
           원자재
         </div>
         <div className="flex gap-2.5 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
-          {commodities.map((it) => (
+          {liveCommodities.map((it) => (
             <MiniCard key={it.key} item={it} onClick={() => setSelected(it)} />
           ))}
         </div>
