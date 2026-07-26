@@ -46,6 +46,17 @@ function formatBasDt(basDt) {
   return `${basDt.slice(2, 4)}.${basDt.slice(4, 6)}.${basDt.slice(6, 8)}`;
 }
 
+function formatBasDt2(isoDate: string) {
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-");
+  return `${y.slice(2)}.${m}.${d}`;
+}
+
+function formatEcosDate(yyyymmdd: string) {
+  if (!yyyymmdd || yyyymmdd.length !== 8) return "";
+  return `${yyyymmdd.slice(2, 4)}.${yyyymmdd.slice(4, 6)}.${yyyymmdd.slice(6, 8)}`;
+}
+
 const newsDigest = [
   {
     tag: "AI/테크",
@@ -563,6 +574,8 @@ const [intlData, setIntlData] = useState<any[]>([]);
 const [twelveData, setTwelveData] = useState<Record<string, any>>({});
 const [krxData, setKrxData] = useState<Record<string, any>>({});
 const [btcData, setBtcData] = useState<any>(null);
+const [fredData, setFredData] = useState<Record<string, any>>({});
+const [ecosData, setEcosData] = useState<any>(null);
 
 useEffect(() => {
   fetch("/api/exim?type=exchange")
@@ -583,6 +596,12 @@ useEffect(() => {
   fetch("/api/coingecko")
     .then((r) => r.json())
     .then((d) => setBtcData(d?.bitcoin || null));
+  fetch("/api/fred")
+  .then((r) => r.json())
+  .then((d) => setFredData(d || {}));
+  fetch("/api/ecos")
+  .then((r) => r.json())
+  .then((d) => setEcosData(d?.krbase || null));
 }, []);
 
 const liveIndices = indices.map((it) => {
@@ -628,8 +647,8 @@ const liveCommodities = commodities.map((it) => {
     };
   }
 
-// WTI, 금 (Twelve Data, ETF 프록시 — 지수 카드랑 같은 twelveData 재사용)
-const tw = twelveData[it.key];
+  // WTI, 금 (Twelve Data, ETF 프록시 — 지수 카드랑 같은 twelveData 재사용)
+  const tw = twelveData[it.key];
   if (tw) {
     const price = parseFloat(tw.close);
     const changePct = parseFloat(tw.percent_change);
@@ -643,6 +662,32 @@ const tw = twelveData[it.key];
 
   return it;
 });
+
+const liveRates = rates.map((it) => {
+  if (it.key === "krbase") {
+    if (ecosData) {
+      return {
+        ...it,
+        base: ecosData.value,
+        chg: `${formatEcosDate(ecosData.date)} 기준`,
+        up: true,
+      };
+    }
+    return it; // 데이터 없으면 더미 그대로
+  }
+
+  const f = fredData[it.key];
+  if (f) {
+    return {
+      ...it,
+      base: f.value,
+      chg: `${formatBasDt2(f.date)} 기준`,
+      up: true,
+    };
+  }
+  return it;
+});
+
 
   return (
     <div className="min-h-screen w-full" style={{ background: COL.bg, color: COL.text }}>
@@ -659,7 +704,7 @@ const tw = twelveData[it.key];
             className="text-xs px-2.5 py-1 rounded-full"
             style={{ background: COL.surface, border: `1px solid ${COL.border}`, color: COL.muted }}
           >
-            프로토타입 · 더미 데이터
+            진행중
           </div>
         </div>
 
@@ -691,15 +736,20 @@ const tw = twelveData[it.key];
           ))}
         </div>
 
-		{/* 금리 */}
-        <div className="mb-2 text-sm font-medium" style={{ color: COL.muted }}>
-          금리
-        </div>
-        <div className="flex gap-2.5 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
-          {rates.map((it) => (
-            <MiniCard key={it.key} item={it} onClick={() => setSelected(it)} />
-          ))}
-        </div>
+    {/* 금리 */}
+    <div className="mb-2 text-sm font-medium" style={{ color: COL.muted }}>
+      금리
+    </div>
+    {fredData.us10y && (
+      <div className="text-[11px] mb-2" style={{ color: COL.muted }}>
+        美 금리는 FRED 발표 기준 {formatBasDt2(fredData.us10y.date)} 데이터 (실시간 아님, 연준 발표 시차 있음)
+      </div>
+    )}
+    <div className="flex gap-2.5 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
+      {liveRates.map((it) => (
+        <MiniCard key={it.key} item={it} onClick={() => setSelected(it)} />
+      ))}
+    </div>
 
 		{/* 수출입은행 환율/금리 실데이터 */}
         <div className="mb-6">
