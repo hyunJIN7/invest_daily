@@ -24,9 +24,9 @@ const spark = (base, vol, seed = 1) =>
 const indices = [
   { key: "kospi", label: "코스피", base: 3214.52, vol: 30, chg: "+0.84%", up: true, seed: 1 },
   { key: "kosdaq", label: "코스닥", base: 812.11, vol: 10, chg: "-0.32%", up: false, seed: 2 },
-  { key: "sp500", label: "S&P 500", base: 6092.4, vol: 40, chg: "+0.41%", up: true, seed: 3 },
-  { key: "nasdaq", label: "나스닥", base: 19842.7, vol: 120, chg: "+0.62%", up: true, seed: 4 },
-  { key: "dow", label: "다우존스", base: 43120.9, vol: 90, chg: "-0.18%", up: false, seed: 5 },
+  { key: "sp500", label: "S&P500 (SPY)", base: 6092.4, vol: 40, chg: "+0.41%", up: true, seed: 3 },
+  { key: "nasdaq", label: "나스닥100 (QQQ)", base: 19842.7, vol: 120, chg: "+0.62%", up: true, seed: 4 },
+  { key: "dow", label: "다우존스 (DIA)", base: 43120.9, vol: 90, chg: "-0.18%", up: false, seed: 5 },
 ];
 
 const commodities = [
@@ -552,21 +552,41 @@ export default function Dashboard() {
   const [newsTab, setNewsTab] = useState("전체");
   const filteredNews = newsDigest.filter((n) => newsTab === "전체" || n.market === newsTab);
 
-  const [exchangeData, setExchangeData] = useState<any[]>([]);
-  const [loanData, setLoanData] = useState<any[]>([]);
-  const [intlData, setIntlData] = useState<any[]>([]);
+const [exchangeData, setExchangeData] = useState<any[]>([]);
+const [loanData, setLoanData] = useState<any[]>([]);
+const [intlData, setIntlData] = useState<any[]>([]);
+const [twelveData, setTwelveData] = useState<Record<string, any>>({});
 
-  useEffect(() => {
-    fetch("/api/exim?type=exchange")
-      .then((r) => r.json())
-      .then((d) => setExchangeData(Array.isArray(d) ? d : []));
-    fetch("/api/exim?type=loan")
-      .then((r) => r.json())
-      .then((d) => setLoanData(Array.isArray(d) ? d : []));
-    fetch("/api/exim?type=international")
-      .then((r) => r.json())
-      .then((d) => setIntlData(Array.isArray(d) ? d : []));
-  }, []);
+useEffect(() => {
+  fetch("/api/exim?type=exchange")
+    .then((r) => r.json())
+    .then((d) => setExchangeData(Array.isArray(d) ? d : []));
+  fetch("/api/exim?type=loan")
+    .then((r) => r.json())
+    .then((d) => setLoanData(Array.isArray(d) ? d : []));
+  fetch("/api/exim?type=international")
+    .then((r) => r.json())
+    .then((d) => setIntlData(Array.isArray(d) ? d : []));
+  fetch("/api/twelvedata")
+    .then((r) => r.json())
+    .then((d) => setTwelveData(d || {}));
+}, []);
+
+// 더미 indices 배열에 twelveData(실데이터)가 있으면 그걸로 덮어씌운 새 배열을 만듦
+const liveIndices = indices.map((it) => {
+  const live = twelveData[it.key]; // sp500, nasdaq, dow 일 때만 값이 있음
+  if (!live) return it; // 아직 못 받아왔거나 kospi/kosdaq이면 더미 그대로
+
+  const price = parseFloat(live.close);
+  const changePct = parseFloat(live.percent_change);
+
+  return {
+    ...it,
+    base: price,
+    chg: (changePct >= 0 ? "+" : "") + changePct.toFixed(2) + "%",
+    up: changePct >= 0,
+  };
+});
 
   return (
     <div className="min-h-screen w-full" style={{ background: COL.bg, color: COL.text }}>
@@ -592,7 +612,7 @@ export default function Dashboard() {
           국내·미국 지수 <span style={{ color: COL.accent }}>· 탭하면 상세 차트</span>
         </div>
         <div className="flex gap-2.5 overflow-x-auto pb-2 mb-5 -mx-1 px-1">
-          {indices.map((it) => (
+          {liveIndices.map((it) => (
             <MiniCard key={it.key} item={it} onClick={() => setSelected(it)} />
           ))}
         </div>
