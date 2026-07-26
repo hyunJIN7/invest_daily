@@ -30,8 +30,8 @@ const indices = [
 ];
 
 const commodities = [
-  { key: "wti", label: "WTI 유가", base: 68.42, vol: 1.2, chg: "+1.12%", up: true, seed: 8, prefix: "$" },
-  { key: "gold", label: "금 (온스)", base: 2614.8, vol: 15, chg: "+0.35%", up: true, seed: 9, prefix: "$" },
+  { key: "wti", label: "WTI 유가 (USO)", base: 68.42, vol: 1.2, chg: "+1.12%", up: true, seed: 8, prefix: "$" },
+  { key: "gold", label: "금 (GLD)", base: 2614.8, vol: 15, chg: "+0.35%", up: true, seed: 9, prefix: "$" },
   { key: "btc", label: "비트코인", base: 96420, vol: 1800, chg: "+2.14%", up: true, seed: 13, prefix: "$" },
 ];
 
@@ -616,16 +616,32 @@ const liveIndices = indices.map((it) => {
 });
 
 const liveCommodities = commodities.map((it) => {
-  if (it.key !== "btc" || !btcData) return it; // wti, gold는 아직 더미 유지
+  // 비트코인 (CoinGecko)
+  if (it.key === "btc" && btcData) {
+    const price = btcData.usd;
+    const changePct = btcData.usd_24h_change;
+    return {
+      ...it,
+      base: price,
+      chg: (changePct >= 0 ? "+" : "") + changePct.toFixed(2) + "%",
+      up: changePct >= 0,
+    };
+  }
 
-  const price = btcData.usd;
-  const changePct = btcData.usd_24h_change;
-  return {
-    ...it,
-    base: price,
-    chg: (changePct >= 0 ? "+" : "") + changePct.toFixed(2) + "%",
-    up: changePct >= 0,
-  };
+// WTI, 금 (Twelve Data, ETF 프록시 — 지수 카드랑 같은 twelveData 재사용)
+const tw = twelveData[it.key];
+  if (tw) {
+    const price = parseFloat(tw.close);
+    const changePct = parseFloat(tw.percent_change);
+    return {
+      ...it,
+      base: price,
+      chg: (changePct >= 0 ? "+" : "") + changePct.toFixed(2) + "%",
+      up: changePct >= 0,
+    };
+  }
+
+  return it;
 });
 
   return (
@@ -663,9 +679,12 @@ const liveCommodities = commodities.map((it) => {
         </div>
 
 		{/* 원자재 */}
-        <div className="mb-2 text-sm font-medium" style={{ color: COL.muted }}>
-          원자재
-        </div>
+      <div className="mb-1 text-sm font-medium" style={{ color: COL.muted }}>
+        원자재
+      </div>
+      <div className="text-[11px] mb-2" style={{ color: COL.muted }}>
+        WTI·금은 무료 플랜 제한으로 추종 ETF(USO/GLD) 가격으로 대체 표시
+      </div>
         <div className="flex gap-2.5 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
           {liveCommodities.map((it) => (
             <MiniCard key={it.key} item={it} onClick={() => setSelected(it)} />

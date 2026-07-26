@@ -9,6 +9,8 @@ const SYMBOL_MAP: Record<string, string> = {
   sp500: "SPY",
   nasdaq: "QQQ",
   dow: "DIA",
+  wti: "USO",
+  gold: "GLD",
 };
 
 export async function GET() {
