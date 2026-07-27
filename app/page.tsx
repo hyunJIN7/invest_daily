@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useMemo, useEffect } from "react";
 import { LineChart, Line, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Treemap } from "recharts";
+import TradingViewHeatmap from "@/components/TradingViewHeatmap";
 
 // ---------- 색 팔레트 ----------
 const COL = {
@@ -150,35 +151,41 @@ const heatmaps = {
   ],
 };
 
-function colorForChange(c) {
-  const clamped = Math.max(-10, Math.min(10, c));
-  const t = Math.min(1, Math.abs(clamped) / 8);
-  const from = clamped >= 0 ? [26, 36, 30] : [38, 26, 26];
-  const to = clamped >= 0 ? [47, 209, 128] : [255, 97, 97];
-  const mix = from.map((f, i) => Math.round(f + (to[i] - f) * t));
-  return "rgb(" + mix.join(",") + ")";
-}
+// function colorForChange(c) {
+//   const clamped = Math.max(-10, Math.min(10, c));
+//   const t = Math.min(1, Math.abs(clamped) / 8);
+//   const from = clamped >= 0 ? [26, 36, 30] : [38, 26, 26];
+//   const to = clamped >= 0 ? [47, 209, 128] : [255, 97, 97];
+//   const mix = from.map((f, i) => Math.round(f + (to[i] - f) * t));
+//   return "rgb(" + mix.join(",") + ")";
+// }
 
-function HeatCell(props) {
-  const { x, y, width, height, name, change } = props;
-  if (width <= 0 || height <= 0 || typeof change !== "number") return null;
-  return (
-    <g>
-      <rect x={x} y={y} width={width} height={height} style={{ fill: colorForChange(change), stroke: COL.bg, strokeWidth: 2 }} />
-      {width > 42 && height > 22 && (
-        <text x={x + 6} y={y + 16} fontSize={11} fontWeight={600} fill="#fff">
-          {name}
-        </text>
-      )}
-      {width > 42 && height > 36 && (
-        <text x={x + 6} y={y + 31} fontSize={10} fill="rgba(255,255,255,0.85)">
-          {change > 0 ? "+" : ""}
-          {change.toFixed(2)}%
-        </text>
-      )}
-    </g>
-  );
-}
+// function HeatCell(props) {
+//   const { x, y, width, height, name, change } = props;
+//   if (width <= 0 || height <= 0 || typeof change !== "number") return null;
+//   return (
+//     <g>
+//       <rect x={x} y={y} width={width} height={height} style={{ fill: colorForChange(change), stroke: COL.bg, strokeWidth: 2 }} />
+//       {width > 42 && height > 22 && (
+//         <text x={x + 6} y={y + 16} fontSize={11} fontWeight={600} fill="#fff">
+//           {name}
+//         </text>
+//       )}
+//       {width > 42 && height > 36 && (
+//         <text x={x + 6} y={y + 31} fontSize={10} fill="rgba(255,255,255,0.85)">
+//           {change > 0 ? "+" : ""}
+//           {change.toFixed(2)}%
+//         </text>
+//       )}
+//     </g>
+//   );
+// }
+
+const HEATMAP_TABS = {
+  "나스닥": "NASDAQ100",
+  "코스피": "KOSPI",
+  "코스닥": "KOSDAQ",
+};
 
 function HeatmapSection() {
   const [tab, setTab] = useState("나스닥");
@@ -189,7 +196,7 @@ function HeatmapSection() {
           시장 히트맵
         </div>
         <div className="flex gap-1">
-          {Object.keys(heatmaps).map((k) => (
+          {Object.keys(HEATMAP_TABS).map((k) => (
             <button
               key={k}
               onClick={() => setTab(k)}
@@ -206,10 +213,8 @@ function HeatmapSection() {
           ))}
         </div>
       </div>
-      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COL.border}`, height: 260 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <Treemap data={heatmaps[tab]} dataKey="size" stroke={COL.bg} content={<HeatCell />} isAnimationActive={false} />
-        </ResponsiveContainer>
+      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${COL.border}`, height: 420 }}>
+        <TradingViewHeatmap key={tab} dataSource={HEATMAP_TABS[tab]} />
       </div>
     </div>
   );
@@ -575,7 +580,7 @@ const [twelveData, setTwelveData] = useState<Record<string, any>>({});
 const [krxData, setKrxData] = useState<Record<string, any>>({});
 const [btcData, setBtcData] = useState<any>(null);
 const [fredData, setFredData] = useState<Record<string, any>>({});
-const [ecosData, setEcosData] = useState<any>(null);
+const [ecosData, setEcosData] = useState<Record<string, any>>({});
 
 useEffect(() => {
   fetch("/api/exim?type=exchange")
@@ -597,11 +602,11 @@ useEffect(() => {
     .then((r) => r.json())
     .then((d) => setBtcData(d?.bitcoin || null));
   fetch("/api/fred")
-  .then((r) => r.json())
-  .then((d) => setFredData(d || {}));
+    .then((r) => r.json())
+    .then((d) => setFredData(d || {}));
   fetch("/api/ecos")
-  .then((r) => r.json())
-  .then((d) => setEcosData(d?.krbase || null));
+    .then((r) => r.json())
+    .then((d) => setEcosData(d || {}));
 }, []);
 
 const liveIndices = indices.map((it) => {
@@ -665,15 +670,11 @@ const liveCommodities = commodities.map((it) => {
 
 const liveRates = rates.map((it) => {
   if (it.key === "krbase") {
-    if (ecosData) {
-      return {
-        ...it,
-        base: ecosData.value,
-        chg: `${formatEcosDate(ecosData.date)} 기준`,
-        up: true,
-      };
+    const kr = ecosData.krbase;
+    if (kr) {
+      return { ...it, base: kr.value, chg: `${formatEcosDate(kr.date)} 기준`, up: true };
     }
-    return it; // 데이터 없으면 더미 그대로
+    return it;
   }
 
   const f = fredData[it.key];
